@@ -1,0 +1,258 @@
+blueprint:
+  name: "Bambu Lab 3D-Drucker: iOS Live Activity"
+  description: >-
+    Erstellt eine iOS Live Activity für deinen Drucker inkl. deutscher Status-Übersetzung.
+    Zeigt Fortschrittsbalken und Restzeit an und warnt bei Fehlern.
+  domain: automation
+  input:
+    notify_service:
+      name: Benachrichtigungsdienst (iPhone)
+      description: "Der notify-Dienst deines iPhones, z. B. notify.mobile_app_iphone_stephan"
+      selector:
+        text: {}
+        
+    printer_title:
+      name: Titel der Live-Aktivität
+      description: "Der Name, der ganz oben in der Benachrichtigung stehen soll."
+      default: "Bambu Lab Drucker"
+      selector:
+        text: {}
+        
+    sensor_status:
+      name: Status-Sensor (Arbeitsschritt)
+      description: "Die Entität für den aktuellen Arbeitsschritt (endet meist auf _aktueller_arbeitsschritt)."
+      selector:
+        entity:
+          domain: sensor
+          
+    sensor_progress:
+      name: Fortschritts-Sensor (%)
+      description: "Die Entität für den prozentualen Druckfortschritt."
+      selector:
+        entity:
+          domain: sensor
+          
+    sensor_end_time:
+      name: Endzeit-Sensor
+      description: "Die Entität für die berechnete Endzeit."
+      selector:
+        entity:
+          domain: sensor
+          
+    tap_url:
+      name: Aktion beim Antippen (Optional)
+      description: "Dashboard-Pfad (z.B. /lovelace/14) oder Kamera (/?entity_id=camera.deine_kamera). Leer lassen für den Standard."
+      default: ""
+      selector:
+        text: {}
+        
+    color_normal:
+      name: Farbe (Normalbetrieb)
+      description: "Hex-Farbcode für den normalen Druck, z.B. das Bambu-Grün."
+      default: "#00AE42"
+      selector:
+        text: {}
+        
+    color_error:
+      name: Farbe (Fehler)
+      description: "Hex-Farbcode für Warnungen und Pausen."
+      default: "#F44336"
+      selector:
+        text: {}
+
+mode: restart
+
+trigger:
+  - platform: state
+    entity_id: !input sensor_status
+  - platform: state
+    entity_id: !input sensor_progress
+  - platform: state
+    entity_id: !input sensor_end_time
+
+variables:
+  # Blueprint-Inputs in Template-Variablen laden
+  sensor_status_var: !input sensor_status
+  sensor_progress_var: !input sensor_progress
+  sensor_end_time_var: !input sensor_end_time
+  color_normal_var: !input color_normal
+  color_error_var: !input color_error
+  tap_url_var: !input tap_url
+  printer_title_var: !input printer_title
+
+  # Logik und Berechnungen
+  raw_st: "{{ states(sensor_status_var) | lower }}"
+  prog: "{{ states(sensor_progress_var) | int(0) }}"
+  end: "{{ states(sensor_end_time_var) }}"
+  end_time_str: >-
+    {{ as_timestamp(end) | timestamp_custom('%H:%M') if end not in
+    ['unavailable', 'unknown', 'None'] else '--:--' }}
+  is_error: "{{ raw_st.startswith('paused_') or raw_st == 'm400_pause' }}"
+  icon_color: "{{ color_error_var if is_error else color_normal_var }}"
+  
+  # Das Wörterbuch für die Übersetzungen
+  st_text: >-
+    {% set map = {
+      "printing": "Druckt",
+      "paused_cutter_error": "Pause: Cutter-Fehler",
+      "print_calibration_lines": "Druckt Kalibrierungslinien",
+      "filament_unloading": "Entlädt Filament",
+      "heatbed_underside_foreign_object_detection": "Prüft Heizbett-Unterseite",
+      "paused_nozzle_filament_covered_detected": "Pause: Filament an Nozzle",
+      "bed_level_phase_2": "Bett-Leveling (Phase 2)",
+      "moving_toolhead_to_center_of_heatbed": "Druckkopf fährt zur Mitte",
+      "identifying_build_plate_type": "Prüft Druckplatten-Typ",
+      "paused_user_gcode": "Pause: Benutzer-GCode",
+      "bed_level_high_temperature": "Bett-Leveling (Heizen)",
+      "waiting_for_heatbed_temperature": "Wartet auf Heizbett",
+      "calibrate_nozzle_offset": "Kalibriert Nozzle-Offset",
+      "calibrating_detection_nozzle_clumping": "Kalibriert Verklumpungserkennung",
+      "check_door_and_cover": "Prüft Tür & Abdeckung",
+      "heating_chamber": "Heizt Bauraum",
+      "cooling_chamber": "Kühlt Bauraum",
+      "unknown": "Unbekannt",
+      "inspecting_first_layer": "Prüft erste Schicht",
+      "paused_nozzle_clog": "Pause: Nozzle verstopft",
+      "moving_toolhead_above_purge_chute": "Fährt zum Auswurf",
+      "auto_bed_leveling": "Auto Bett-Leveling",
+      "bed_level_phase_1": "Bett-Leveling (Phase 1)",
+      "waiting_chamber_temperature_equalize": "Bauraum-Temperaturabgleich",
+      "calibrate_birdeye_camera": "Kalibriert Kamera",
+      "preparing_ams": "Bereitet AMS vor",
+      "calibrating_blade_holder_position": "Kalibriert Klingenhalter",
+      "absolute_accuracy_calibration": "Genauigkeits-Kalibrierung",
+      "heatbed_surface_foreign_object_detection": "Prüft Heizbett-Oberfläche",
+      "paused_heat_bed_temperature_malfunction": "Pause: Heizbett Temp-Fehler",
+      "homing_toolhead": "Homing Druckkopf",
+      "calibrating_motor_noise": "Kalibriert Motorgeräusche",
+      "paused_nozzle_temperature_malfunction": "Pause: Nozzle Temp-Fehler",
+      "paused_user": "Pausiert (Benutzer)",
+      "measuring_surface": "Misst Oberfläche",
+      "calibrating_camera_offset": "Kalibriert Kamera-Offset",
+      "paused_filament_runout": "Pause: Filament leer",
+      "laser_calibration": "Laser-Kalibrierung",
+      "check_absolute_accuracy_before_calibration": "Prüft Genauigkeit (vorher)",
+      "hotend_type_detection": "Erkennt Hotend-Typ",
+      "check_plaform": "Prüft Plattform",
+      "paused_low_fan_speed_heat_break": "Pause: Lüfterfehler",
+      "sweeping_xy_mech_mode": "XY-Mechanik Test",
+      "purifying_chamber_air": "Reinigt Bauraumluft",
+      "preparing_hotend": "Bereitet Hotend vor",
+      "paused_first_layer_error": "Pause: Fehler erste Schicht",
+      "check_absolute_accuracy_after_calibration": "Prüft Genauigkeit (nachher)",
+      "filament_loading": "Lädt Filament",
+      "paused_ams_lost": "Pause: AMS getrennt",
+      "heated_bedcooling": "Kühlt Heizbett",
+      "calibrating_extrusion": "Kalibriert Extrusion",
+      "build_plate_alignment_detection": "Prüft Druckplatten-Lage",
+      "measuring_rotary_attachment": "Misst Rotary-Modul",
+      "homing_blade_holder": "Homing Klingenhalter",
+      "checking_extruder_temperature": "Prüft Extruder-Temp",
+      "cleaning_nozzle_tip": "Reinigt Nozzle-Spitze",
+      "calibrating_cutter_model_offset": "Kalibriert Cutter-Offset",
+      "active_arc_fitting": "Aktives Arc-Fitting",
+      "motor_noise_showoff": "Motor-Test",
+      "calibrating_extrusion_flow": "Kalibriert Extrusionsfluss",
+      "heatbed_preheating": "Heizt Heizbett vor",
+      "check_quick_release": "Prüft Schnellspanner",
+      "heating_hotend": "Heizt Hotend",
+      "thermal_preconditioning": "Vorkonditionierung (Thermisch)",
+      "check_material": "Prüft Material",
+      "changing_filament": "Wechselt Filament",
+      "check_birdeye_camera_position": "Prüft Kameraposition",
+      "scanning_bed_surface": "Scannt Bett-Oberfläche",
+      "calibrating_live_view_camera": "Kalibriert Live-Kamera",
+      "cooling_nozzle": "Kühlt Nozzle",
+      "paused_chamber_temperature_control_error": "Pause: Bauraum Temp-Fehler",
+      "check_material_position": "Prüft Materialposition",
+      "paused_front_cover_falling": "Pause: Frontabdeckung ab",
+      "hotend_pick_place_test": "Hotend Test",
+      "calibrating_micro_lidar": "Kalibriert Micro-LiDAR",
+      "pre_extrusion_before_printing": "Vorextrusion",
+      "m400_pause": "Pause (M400)",
+      "paused_skipped_step": "Pause: Schrittverlust"
+    } %}
+    {{ map.get(raw_st, raw_st | replace('_', ' ') | title) }}
+
+action:
+  # TEIL A: Fehler-Push-Nachricht (Läuft parallel zur Live-Aktivität)
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ is_error and trigger is defined and trigger.entity_id == sensor_status_var 
+                 and trigger.from_state is defined 
+                 and not trigger.from_state.state.startswith('paused') 
+                 and trigger.from_state.state != 'm400_pause' }}
+        sequence:
+          - action: !input notify_service
+            data:
+              title: "⚠️ {{ printer_title_var }} Fehler"
+              message: "{{ st_text }}"
+              data:
+                url: "{{ tap_url_var }}"
+                notification_icon: mdi:printer-3d-alert
+                notification_icon_color: "{{ color_error_var }}"
+
+  # TEIL B: Steuerung der iOS Live Activity
+  - choose:
+      # 1. DRUCKT / AKTIV (Alles außer offline, idle oder fertig)
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ raw_st not in ['offline', 'idle', 'finish', 'finished', 'done', 'unavailable', 'unknown'] }}
+        sequence:
+          - action: !input notify_service
+            data:
+              title: "{{ printer_title_var }}"
+              message: >-
+                {% if is_error %}Aktion erforderlich!{% else %}Fertig um {{ end_time_str }} Uhr{% endif %}
+              data:
+                tag: bambulab_live
+                live_update: true
+                silent: true
+                url: "{{ tap_url_var }}"
+                critical_text: "{{ st_text }}"
+                progress: "{{ prog }}"
+                progress_max: 100
+                notification_icon: "{{ 'mdi:printer-3d-alert' if is_error else 'mdi:printer-3d-nozzle' }}"
+                notification_icon_color: "{{ icon_color }}"
+
+      # 2. DRUCK FERTIG
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ raw_st in ['finish', 'finished', 'done'] or 
+                 (raw_st == 'idle' and prog == 100) }}
+        sequence:
+          - action: !input notify_service
+            data:
+              title: "{{ printer_title_var }}"
+              message: "Der Druck ist fertig!"
+              data:
+                tag: bambulab_live
+                live_update: true
+                url: "{{ tap_url_var }}"
+                critical_text: "Fertig"
+                progress: 100
+                progress_max: 100
+                notification_icon: mdi:printer-3d-check
+                notification_icon_color: "{{ color_normal_var }}"
+          - delay: "00:15:00"
+          - action: !input notify_service
+            data:
+              message: clear_notification
+              data:
+                tag: bambulab_live
+
+      # 3. OFFLINE / IDLE (Live-Aktivität sofort beenden)
+      - conditions:
+          - condition: template
+            value_template: >-
+              {{ raw_st in ['offline', 'idle', 'unavailable', 'unknown'] }}
+        sequence:
+          - action: !input notify_service
+            data:
+              message: clear_notification
+              data:
+                tag: bambulab_live
