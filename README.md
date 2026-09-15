@@ -2,7 +2,7 @@
 
 Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Sperrbildschirm & Dynamic Island) für deinen Bambu Lab 3D-Drucker in Home Assistant. Er zeigt den aktuellen Status, den Druckfortschritt und die Endzeit an, übersetzt englische Statusmeldungen ins Deutsche und alarmiert dich sofort bei Fehlern.
 
-[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=DEINE_RAW_URL_HIER_EINFÜGEN)
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/SteeeveAT/ha-blueprints/main/bambu-live-activity.yaml)
 
 ## ✨ Features
 
