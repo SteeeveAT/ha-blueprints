@@ -10,49 +10,49 @@ blueprint:
       description: "Der notify-Dienst deines iPhones, z. B. notify.mobile_app_iphone_stephan"
       selector:
         text: {}
-        
+
     printer_title:
       name: Titel der Live-Aktivität
       description: "Der Name, der ganz oben in der Benachrichtigung stehen soll."
       default: "Bambu Lab Drucker"
       selector:
         text: {}
-        
+
     sensor_status:
       name: Status-Sensor (Arbeitsschritt)
       description: "Die Entität für den aktuellen Arbeitsschritt (endet meist auf _aktueller_arbeitsschritt)."
       selector:
         entity:
           domain: sensor
-          
+
     sensor_progress:
       name: Fortschritts-Sensor (%)
       description: "Die Entität für den prozentualen Druckfortschritt."
       selector:
         entity:
           domain: sensor
-          
+
     sensor_end_time:
       name: Endzeit-Sensor
       description: "Die Entität für die berechnete Endzeit."
       selector:
         entity:
           domain: sensor
-          
+
     tap_url:
       name: Aktion beim Antippen (Optional)
       description: "Dashboard-Pfad (z.B. /lovelace/14) oder Kamera (/?entity_id=camera.deine_kamera). Leer lassen für den Standard."
       default: ""
       selector:
         text: {}
-        
+
     color_normal:
       name: Farbe (Normalbetrieb)
       description: "Hex-Farbcode für den normalen Druck, z.B. das Bambu-Grün."
       default: "#00AE42"
       selector:
         text: {}
-        
+
     color_error:
       name: Farbe (Fehler)
       description: "Hex-Farbcode für Warnungen und Pausen."
@@ -89,7 +89,10 @@ variables:
     ['unavailable', 'unknown', 'None'] else '--:--' }}
   is_error: "{{ raw_st.startswith('paused_') or raw_st == 'm400_pause' }}"
   icon_color: "{{ color_error_var if is_error else color_normal_var }}"
-  
+
+  # Generiert einen einzigartigen Tag, z.B. "bambu_sensor_p2s_1234_aktueller_arbeitsschritt"
+  dynamic_tag: "bambu_{{ sensor_status_var | replace('.', '_') }}"
+
   # Das Wörterbuch für die Übersetzungen
   st_text: >-
     {% set map = {
@@ -208,7 +211,7 @@ action:
               message: >-
                 {% if is_error %}Aktion erforderlich!{% else %}Fertig um {{ end_time_str }} Uhr{% endif %}
               data:
-                tag: bambulab_live
+                tag: "{{ dynamic_tag }}"
                 live_update: true
                 silent: true
                 url: "{{ tap_url_var }}"
@@ -230,7 +233,7 @@ action:
               title: "{{ printer_title_var }}"
               message: "Der Druck ist fertig!"
               data:
-                tag: bambulab_live
+                tag: "{{ dynamic_tag }}"
                 live_update: true
                 url: "{{ tap_url_var }}"
                 critical_text: "Fertig"
@@ -243,7 +246,7 @@ action:
             data:
               message: clear_notification
               data:
-                tag: bambulab_live
+                tag: "{{ dynamic_tag }}"
 
       # 3. OFFLINE / IDLE (Live-Aktivität sofort beenden)
       - conditions:
@@ -255,4 +258,4 @@ action:
             data:
               message: clear_notification
               data:
-                tag: bambulab_live
+                tag: "{{ dynamic_tag }}"
