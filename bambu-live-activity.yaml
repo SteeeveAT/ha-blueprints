@@ -7,7 +7,7 @@ blueprint:
   input:
     notify_service:
       name: Benachrichtigungsdienst (iPhone)
-      description: "Der notify-Dienst deines iPhones, z. B. notify.mobile_app_iphone_stephan"
+      description: "Der notify-Dienst deines iPhones, z. B. notify.mobile_app_iphone"
       selector:
         text: {}
 
@@ -48,17 +48,17 @@ blueprint:
 
     color_normal:
       name: Farbe (Normalbetrieb)
-      description: "Hex-Farbcode für den normalen Druck, z.B. das Bambu-Grün."
-      default: "#00AE42"
+      description: "Wähle die Farbe für den normalen Druck (z. B. Bambu-Grün)."
+      default: [0, 174, 66]
       selector:
-        text: {}
+        color_rgb: {}
 
     color_error:
       name: Farbe (Fehler)
-      description: "Hex-Farbcode für Warnungen und Pausen."
-      default: "#F44336"
+      description: "Wähle die Farbe für Warnungen und Pausen."
+      default: [244, 67, 54] # Entspricht #F44336
       selector:
-        text: {}
+        color_rgb: {}
 
 mode: restart
 
@@ -75,8 +75,14 @@ variables:
   sensor_status_var: !input sensor_status
   sensor_progress_var: !input sensor_progress
   sensor_end_time_var: !input sensor_end_time
-  color_normal_var: !input color_normal
-  color_error_var: !input color_error
+
+  # Lade die RGB-Werte aus dem Color-Picker
+  color_normal_rgb: !input color_normal
+  color_error_rgb: !input color_error
+
+  # Formatiere die RGB-Liste (z.B. [0, 174, 66]) in einen Hex-String (#00ae42) für iOS
+  color_normal_var: "{{ '#%02x%02x%02x' | format(color_normal_rgb[0], color_normal_rgb[1], color_normal_rgb[2]) }}"
+  color_error_var: "{{ '#%02x%02x%02x' | format(color_error_rgb[0], color_error_rgb[1], color_error_rgb[2]) }}"
   tap_url_var: !input tap_url
   printer_title_var: !input printer_title
 
@@ -151,7 +157,7 @@ variables:
       "measuring_rotary_attachment": "Misst Rotary-Modul",
       "homing_blade_holder": "Homing Klingenhalter",
       "checking_extruder_temperature": "Prüft Extruder-Temp",
-      "cleaning_nozzle_tip": "Reinigt Nozzle-Spitze",
+      "cleaning_nozzle_tip": "Reinigt Nozzle",
       "calibrating_cutter_model_offset": "Kalibriert Cutter-Offset",
       "active_arc_fitting": "Aktives Arc-Fitting",
       "motor_noise_showoff": "Motor-Test",

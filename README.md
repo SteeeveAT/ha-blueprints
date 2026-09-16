@@ -41,10 +41,10 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 - **Es kommt keine Benachrichtigung an:** Prüfe unter _Entwicklerwerkzeuge -> Aktionen_, ob der Dienstname unter "Benachrichtigungsdienst" (z. B. `notify.mobile_app_iphone_max`) exakt stimmt und funktioniert.
 - **Die Automation bricht ab:** Dieser Blueprint verlässt sich darauf, dass die Sensoren die Original-Statuswerte ausgeben (z. B. `printing` und nicht `Druckt`). Prüfe unter _Entwicklerwerkzeuge -> Zustände_, ob die rohen Werte auf Englisch ankommen.
 
-## Updates
+## 🔄 Updates
 
 - 2026-09-15: Initialisieren und parallele Live-Aktivitäten sind jetzt möglich
-
+- 2026-09-16: Color-Selectoren, Übersetzung optimiert
 ---
 
 _Erstellt für die Home Assistant Community. Happy Printing! 🚀 (Hört gerne mal in den 3D-Druck Podcast **Extrusion & Error** rein!)_
