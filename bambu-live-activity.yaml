@@ -3,6 +3,7 @@ blueprint:
   description: >-
     Erstellt eine iOS Live Activity für deinen Drucker inkl. deutscher Status-Übersetzung.
     Zeigt Fortschrittsbalken und Restzeit an und warnt bei Fehlern.
+    Updates werden gedrosselt, damit das Push-Limit der Companion App (500 pro Tag und Gerät) nicht erreicht wird.
   domain: automation
   input:
     notify_service:
@@ -60,15 +61,65 @@ blueprint:
       selector:
         color_rgb: {}
 
+    progress_step:
+      name: Fortschritts-Schrittweite
+      description: "Die Live-Aktivität wird nur aktualisiert, wenn der Fortschritt ein Vielfaches dieses Werts überschreitet. 5 % sind maximal 20 Updates pro Druck."
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 25
+          step: 1
+          unit_of_measurement: "%"
+
+    min_update_interval:
+      name: Mindestabstand zwischen Updates
+      description: "Gilt für Routine-Updates: Fortschritt, Endzeit und Arbeitsschritte wie Filamentwechsel. Start, Pause, Fehler und Ende werden immer sofort gesendet."
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: min
+
+    eta_threshold:
+      name: Endzeit-Schwelle
+      description: "Eine geänderte Endzeit löst nur dann ein eigenes Update aus, wenn sie mindestens um diesen Wert springt. Kleinere Änderungen werden beim nächsten Fortschritts-Update mitgeschickt."
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 120
+          step: 1
+          unit_of_measurement: min
+
+# restart bleibt nötig: Ein neuer Druck muss den 15-Minuten-Timer nach "Fertig" abbrechen,
+# sonst löscht dieser die neue Live-Aktivität. Trigger, die an der condition scheitern,
+# starten die Automation nicht neu und lassen den Timer also weiterlaufen.
 mode: restart
 
 trigger:
+  # not_to bzw. to ignorieren reine Attribut-Änderungen, die sonst ebenfalls auslösen würden
   - platform: state
     entity_id: !input sensor_status
+    id: status
+    not_to: ["offline", "unavailable", "unknown"]
+  # Verbindungsabbrüche erst nach 5 Minuten werten, damit die Aktivität bei kurzen
+  # Aussetzern nicht beendet und neu gestartet wird (300 s, siehe condition)
+  - platform: state
+    entity_id: !input sensor_status
+    id: status
+    to: ["offline", "unavailable", "unknown"]
+    for: "00:05:00"
   - platform: state
     entity_id: !input sensor_progress
+    id: progress
+    to: ~
   - platform: state
     entity_id: !input sensor_end_time
+    id: end_time
+    to: ~
 
 variables:
   # Blueprint-Inputs in Template-Variablen laden
@@ -85,6 +136,9 @@ variables:
   color_error_var: "{{ '#%02x%02x%02x' | format(color_error_rgb[0], color_error_rgb[1], color_error_rgb[2]) }}"
   tap_url_var: !input tap_url
   printer_title_var: !input printer_title
+  progress_step_var: !input progress_step
+  min_update_interval_var: !input min_update_interval
+  eta_threshold_var: !input eta_threshold
 
   # Logik und Berechnungen
   raw_st: "{{ states(sensor_status_var) | lower }}"
@@ -95,6 +149,18 @@ variables:
     ['unavailable', 'unknown', 'None'] else '--:--' }}
   is_error: "{{ raw_st in ['failed', 'pause'] }}"
   icon_color: "{{ color_error_var if is_error else color_normal_var }}"
+
+  # Phase des Druckers: error, done, off oder active
+  done_states: ["finish", "finished", "done"]
+  off_states: ["offline", "idle", "unavailable", "unknown"]
+  phase: >-
+    {% if is_error %}error{% elif raw_st in done_states or (raw_st == 'idle' and prog == 100)
+    %}done{% elif raw_st in off_states %}off{% else %}active{% endif %}
+
+  # last_triggered zählt nur Läufe, die die condition passiert haben, also echte Updates
+  interval_ok: >-
+    {{ as_timestamp(now()) - as_timestamp(this.attributes.last_triggered, 0)
+       >= min_update_interval_var * 60 }}
 
   # Generiert einen einzigartigen Tag je Drucker
   dynamic_tag: "bambu_{{ sensor_status_var | replace('.', '_') }}"
@@ -114,6 +180,48 @@ variables:
       "unknown": "Unbekannt"
     } %}
     {{ map.get(raw_st, raw_st | replace('_', ' ') | title) }}
+
+# Entscheidet, ob dieser Trigger ein Update wert ist. Jedes Update ist ein Push.
+condition:
+  - condition: template
+    value_template: >-
+      {% set live = ['active', 'error'] %}
+      {% set from_raw = trigger.from_state.state if trigger.from_state else 'unknown' %}
+      {% set from_st = from_raw | lower %}
+      {% if trigger.id == 'status' %}
+        {# Aussetzer unter 300 s: Die Aktivität läuft noch, also gilt der Drucker davor als aktiv #}
+        {% set short_outage = from_st in ['offline', 'unavailable', 'unknown']
+           and trigger.from_state
+           and as_timestamp(trigger.to_state.last_changed)
+               - as_timestamp(trigger.from_state.last_changed) < 300 %}
+        {% set from_phase = 'active' if short_outage
+           else 'error' if from_st in ['failed', 'pause']
+           else 'done' if from_st in done_states or (from_st == 'idle' and prog == 100)
+           else 'off' if from_st in off_states
+           else 'active' %}
+        {# Pausen und Fehler nie drosseln, auch nicht als Arbeitsschritt wie paused_filament_runout #}
+        {% set urgent = (raw_st ~ ' ' ~ from_st) is search('paus|fail') %}
+        {% if phase != from_phase %}
+          {# Zwischen off und done ist kein Update nötig: Die Aktivität ist beendet oder läuft aus #}
+          {{ phase in live or from_phase in live }}
+        {% else %}
+          {{ phase in live and (urgent or interval_ok) }}
+        {% endif %}
+      {% elif trigger.id == 'progress' %}
+        {% set to_p = trigger.to_state.state | int(-1) %}
+        {% set from_p = from_st | int(-1) %}
+        {% set crossed = to_p >= 0 and from_p >= 0
+           and to_p // progress_step_var != from_p // progress_step_var %}
+        {# Der Status kann schon idle sein, bevor der Fortschritt die 100 erreicht #}
+        {% set late_finish = raw_st == 'idle' and to_p == 100 and 0 <= from_p < 100 %}
+        {{ (phase == 'active' and crossed and interval_ok) or late_finish }}
+      {% else %}
+        {% set to_t = as_timestamp(trigger.to_state.state, none) %}
+        {% set from_t = as_timestamp(from_raw, none) %}
+        {# Die erste gültige Endzeit eines Drucks sofort senden, sonst nur bei großen Sprüngen #}
+        {{ phase == 'active' and to_t is not none and (from_t is none or
+           (interval_ok and (to_t - from_t) | abs >= eta_threshold_var * 60)) }}
+      {% endif %}
 
 action:
   # TEIL A: Fehler-Push-Nachricht (Läuft parallel zur Live-Aktivität)
@@ -139,8 +247,7 @@ action:
       # 1. DRUCKT / AKTIV (Alles außer offline, idle oder fertig)
       - conditions:
           - condition: template
-            value_template: >-
-              {{ raw_st not in ['offline', 'idle', 'finish', 'finished', 'done', 'unavailable', 'unknown'] }}
+            value_template: "{{ phase in ['active', 'error'] }}"
         sequence:
           - action: !input notify_service
             data:
@@ -161,9 +268,7 @@ action:
       # 2. DRUCK FERTIG
       - conditions:
           - condition: template
-            value_template: >-
-              {{ raw_st in ['finish', 'finished', 'done'] or 
-                 (raw_st == 'idle' and prog == 100) }}
+            value_template: "{{ phase == 'done' }}"
         sequence:
           - action: !input notify_service
             data:
@@ -188,8 +293,7 @@ action:
       # 3. OFFLINE / IDLE (Live-Aktivität sofort beenden)
       - conditions:
           - condition: template
-            value_template: >-
-              {{ raw_st in ['offline', 'idle', 'unavailable', 'unknown'] }}
+            value_template: "{{ phase == 'off' }}"
         sequence:
           - action: !input notify_service
             data:

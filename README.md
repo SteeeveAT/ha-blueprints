@@ -7,7 +7,8 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 ## ✨ Features
 
 - **Native iOS Integration:** Fortschrittsbalken und Restzeit direkt auf dem Sperrbildschirm und in der Dynamic Island.
-- **Stumme Updates:** Der Fortschritt wird im Hintergrund aktualisiert (`silent: true`), ohne dass das iPhone bei jedem Prozentpunkt vibriert oder klingelt.
+- **Stumme Updates:** Der Fortschritt wird im Hintergrund aktualisiert (`silent: true`), ohne dass das iPhone bei jedem Update vibriert oder klingelt.
+- **Sparsame Updates:** Die Companion App erlaubt 500 Push-Nachrichten pro Tag und Gerät, und jedes Update der Live-Aktivität zählt als Push. Der Blueprint sendet den Fortschritt deshalb nur in einstellbaren Schritten. Im Leerlauf sendet er nichts, kurze Verbindungsabbrüche überbrückt er.
 - **Deutsche Übersetzung:** Englische Statuswerte (z. B. `printing`, `paused_cutter_error`, `bed_level_phase_1`) werden automatisch in sauberes Deutsch übersetzt.
 - **Intelligente Fehlererkennung:** Geht der Drucker in einen Fehlerzustand (Filament leer, Spaghetti-Erkennung etc.), färbt sich die Live-Aktivität rot und schickt dir _einmalig_ eine akustische Push-Warnung.
 - **Deep-Linking (Klick-Aktion):** Beim Antippen der Live-Aktivität öffnet sich direkt ein definierbares Dashboard (z. B. deine 3D-Drucker Ansicht) oder der Kamera-Stream.
@@ -35,16 +36,23 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 | **Endzeit-Sensor**          | Entität für die geplante Endzeit.                        | `sensor.p2s_..._endzeit`                     |
 | **Aktion beim Antippen**    | URL, die beim Klick auf dem iPhone geöffnet werden soll. | `/lovelace/14` oder `/?entity_id=camera.xyz` |
 | **Farben**                  | Hex-Codes für Normalbetrieb und Fehler.                  | `#00AE42` (Bambu Grün) / `#F44336` (Rot)     |
+| **Fortschritts-Schrittweite** | Update nur bei jedem Vielfachen dieses Werts.          | `5` % (Standard)                             |
+| **Mindestabstand**          | Mindestzeit zwischen Routine-Updates. Start, Pause, Fehler und Ende kommen immer sofort. | `5` min (Standard) |
+| **Endzeit-Schwelle**        | Ab dieser Abweichung löst die Endzeit ein eigenes Update aus. | `10` min (Standard)                     |
 
 ## 💡 Fehlerbehebung (Troubleshooting)
 
 - **Es kommt keine Benachrichtigung an:** Prüfe unter _Entwicklerwerkzeuge -> Aktionen_, ob der Dienstname unter "Benachrichtigungsdienst" (z. B. `notify.mobile_app_iphone_max`) exakt stimmt und funktioniert.
+- **Push-Limit erreicht:** Den aktuellen Zähler zeigt die iOS-App unter _Einstellungen -> Benachrichtigungen_. Das Limit wird um Mitternacht UTC zurückgesetzt. Mehrere Drucker auf einem iPhone teilen sich das Limit, erhöhe dann die Schrittweite oder den Mindestabstand.
 - **Die Automation bricht ab:** Dieser Blueprint verlässt sich darauf, dass die Sensoren die Original-Statuswerte ausgeben (z. B. `printing` und nicht `Druckt`). Prüfe unter _Entwicklerwerkzeuge -> Zustände_, ob die rohen Werte auf Englisch ankommen.
 
 ## 🔄 Updates
 
 - 2026-09-15: Initialisieren und parallele Live-Aktivitäten sind jetzt möglich
 - 2026-09-16: Color-Selectoren, Übersetzung optimiert
+- 2026-09-21: Status-Sensor ändern, da der vorherige bei Fehler diese nicht angezeigt hat
+- 2026-11-06: Deutlich weniger Push-Nachrichten durch einstellbare Schrittweite, Mindestabstand und Endzeit-Schwelle
+
 ---
 
 _Erstellt für die Home Assistant Community. Happy Printing! 🚀 (Hört gerne mal in den 3D-Druck Podcast **Extrusion & Error** rein!)_
