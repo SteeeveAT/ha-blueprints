@@ -47,6 +47,19 @@ blueprint:
       selector:
         text: {}
 
+    finish_image:
+      name: Bild bei Druckende (Optional)
+      description: >-
+        Kamera oder Bild-Entität des Druckers (z. B. camera.x1c_kamera oder image.p1s_kamera).
+        Ist eine gewählt, kommt bei Druckende zusätzlich eine Benachrichtigung mit einem Foto vom fertigen Druck.
+        Die Live-Aktivität selbst kann unter iOS keine Bilder anzeigen. Leer lassen, um kein Bild zu senden.
+      default: ""
+      selector:
+        entity:
+          domain:
+            - camera
+            - image
+
     color_normal:
       name: Farbe (Normalbetrieb)
       description: "Wähle die Farbe für den normalen Druck (z. B. Bambu-Grün)."
@@ -135,6 +148,7 @@ variables:
   color_normal_var: "{{ '#%02x%02x%02x' | format(color_normal_rgb[0], color_normal_rgb[1], color_normal_rgb[2]) }}"
   color_error_var: "{{ '#%02x%02x%02x' | format(color_error_rgb[0], color_error_rgb[1], color_error_rgb[2]) }}"
   tap_url_var: !input tap_url
+  finish_image_var: !input finish_image
   printer_title_var: !input printer_title
   progress_step_var: !input progress_step
   min_update_interval_var: !input min_update_interval
@@ -283,6 +297,25 @@ action:
                 progress_max: 100
                 notification_icon: mdi:printer-3d-check
                 notification_icon_color: "{{ color_normal_var }}"
+          # Foto vom fertigen Druck als eigene Benachrichtigung. Eigener Tag, damit sie die
+          # Live-Aktivität nicht ersetzt. entity_picture enthält einen Zugriffstoken, über den die
+          # App das Bild beim Empfang lädt. Das funktioniert für camera- und image-Entitäten.
+          - if:
+              - condition: template
+                value_template: >-
+                  {{ finish_image_var not in ['', none]
+                     and state_attr(finish_image_var, 'entity_picture') is not none }}
+            then:
+              - action: !input notify_service
+                data:
+                  title: "{{ printer_title_var }}"
+                  message: "So sieht dein fertiger Druck aus."
+                  data:
+                    tag: "{{ dynamic_tag }}_bild"
+                    url: "{{ tap_url_var }}"
+                    image: "{{ state_attr(finish_image_var, 'entity_picture') }}"
+                    notification_icon: mdi:printer-3d-check
+                    notification_icon_color: "{{ color_normal_var }}"
           - delay: "00:15:00"
           - action: !input notify_service
             data:

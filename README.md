@@ -12,6 +12,7 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 - **Deutsche Übersetzung:** Englische Statuswerte (z. B. `printing`, `paused_cutter_error`, `bed_level_phase_1`) werden automatisch in sauberes Deutsch übersetzt.
 - **Intelligente Fehlererkennung:** Geht der Drucker in einen Fehlerzustand (Filament leer, Spaghetti-Erkennung etc.), färbt sich die Live-Aktivität rot und schickt dir _einmalig_ eine akustische Push-Warnung.
 - **Deep-Linking (Klick-Aktion):** Beim Antippen der Live-Aktivität öffnet sich direkt ein definierbares Dashboard (z. B. deine 3D-Drucker Ansicht) oder der Kamera-Stream.
+- **Foto bei Druckende (optional):** Ist eine Kamera gewählt, kommt bei Druckende eine zusätzliche Benachrichtigung mit einem Foto vom fertigen Druck. In der Live-Aktivität selbst lässt iOS keine Bilder zu.
 - **Automatischer Cleanup:** Die Benachrichtigung verschwindet automatisch 15 Minuten nach dem fertigen Druck oder sofort, wenn der Drucker offline/idle geht.
 
 ## 📋 Voraussetzungen
@@ -35,6 +36,7 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 | **Fortschritts-Sensor**     | Entität für die %.                                       | `sensor.p2s_..._druckfortschritt`            |
 | **Endzeit-Sensor**          | Entität für die geplante Endzeit.                        | `sensor.p2s_..._endzeit`                     |
 | **Aktion beim Antippen**    | URL, die beim Klick auf dem iPhone geöffnet werden soll. | `/lovelace/14` oder `/?entity_id=camera.xyz` |
+| **Bild bei Druckende**      | Kamera- oder Bild-Entität für das Foto vom fertigen Druck. Leer = kein Foto. | `camera.x1c_kamera` / `image.p1s_kamera` |
 | **Farben**                  | Hex-Codes für Normalbetrieb und Fehler.                  | `#00AE42` (Bambu Grün) / `#F44336` (Rot)     |
 | **Fortschritts-Schrittweite** | Update nur bei jedem Vielfachen dieses Werts.          | `5` % (Standard)                             |
 | **Mindestabstand**          | Mindestzeit zwischen Routine-Updates. Start, Pause, Fehler und Ende kommen immer sofort. | `5` min (Standard) |
@@ -46,12 +48,15 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 - **Push-Limit erreicht:** Den aktuellen Zähler zeigt die iOS-App unter _Einstellungen -> Benachrichtigungen_. Das Limit wird um Mitternacht UTC zurückgesetzt. Mehrere Drucker auf einem iPhone teilen sich das Limit, erhöhe dann die Schrittweite oder den Mindestabstand.
 - **Die Automation bricht ab:** Dieser Blueprint verlässt sich darauf, dass die Sensoren die Original-Statuswerte ausgeben (z. B. `printing` und nicht `Druckt`). Prüfe unter _Entwicklerwerkzeuge -> Zustände_, ob die rohen Werte auf Englisch ankommen.
 
+- **Kein Foto bei Druckende:** Prüfe unter _Entwicklerwerkzeuge -> Zustände_, ob die gewählte Entität das Attribut `entity_picture` hat. Das Foto zählt als zusätzlicher Push.
+
 ## 🔄 Updates
 
 - 2026-09-15: Initialisieren und parallele Live-Aktivitäten sind jetzt möglich
 - 2026-09-16: Color-Selectoren, Übersetzung optimiert
 - 2026-09-21: Status-Sensor ändern, da der vorherige bei Fehler diese nicht angezeigt hat
 - 2026-11-06: Deutlich weniger Push-Nachrichten durch einstellbare Schrittweite, Mindestabstand und Endzeit-Schwelle
+- 2026-11-11: Optionales Foto vom fertigen Druck als Benachrichtigung bei Druckende
 
 ---
 
