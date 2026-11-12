@@ -60,4 +60,26 @@ Dieser Blueprint erstellt vollautomatisch eine native **iOS Live Activity** (Spe
 
 ---
 
+# 🍽️ Geschirrspüler (Home Connect) iOS Live Activity
+
+Zeigt Programm, Fortschritt und Endzeit eines Home-Connect-Geschirrspülers (Siemens, Bosch, Neff, Gaggenau) als iOS Live Activity an. Updates sind wie beim Bambu-Blueprint gedrosselt, damit das Push-Limit von 500 pro Tag nicht erreicht wird.
+
+[![Open your Home Assistant instance and show the blueprint import dialog with a specific blueprint pre-filled.](https://my.home-assistant.io/badges/blueprint_import.svg)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https://raw.githubusercontent.com/SteeeveAT/ha-blueprints/main/siemens-geschirrspueler-live-activity.yaml)
+
+Voraussetzung ist die **Home Connect**-Integration von Home Assistant.
+
+| Feld                        | Beschreibung                                             | Beispiel                                     |
+| :-------------------------- | :------------------------------------------------------- | :------------------------------------------- |
+| **Benachrichtigungsdienst** | Der exakte Name deines iPhone Notify-Dienstes.           | `notify.mobile_app_iphone_stephan`           |
+| **Betriebszustand**         | Entität für den Betriebszustand.                         | `sensor.geschirrspuler_betriebszustand`      |
+| **Fortschritts-Sensor**     | Entität für die %.                                       | `sensor.geschirrspuler_programm_fortschritt` |
+| **Endzeit-Sensor**          | Entität für die Programmendzeit.                         | `sensor.geschirrspuler_programm_endzeit`     |
+| **Aktives Programm**        | Optional: Programmname in der Live-Aktivität.            | `sensor.<geräte-id>_active_program`          |
+| **Farben**                  | Läuft, pausiert, Aktion erforderlich/Fehler, fertig.     | `#26C6DA` / `#FF9800` / `#F44336` / `#4CAF50` |
+| **Schrittweite, Mindestabstand, Endzeit-Schwelle** | Wie beim Bambu-Blueprint. | `5` % / `5` min / `10` min |
+
+Start, Pause, „Aktion erforderlich“, Fehler und Ende werden immer sofort gesendet. Bei einem Fehler endet die Live-Aktivität und es kommt eine eigene Warnung. Nach „Fertig“ verschwindet die Live-Aktivität nach 15 Minuten.
+
+---
+
 _Erstellt für die Home Assistant Community. Happy Printing! 🚀 (Hört gerne mal in den 3D-Druck Podcast **Extrusion & Error** rein!)_

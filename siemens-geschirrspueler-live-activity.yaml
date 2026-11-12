@@ -1,0 +1,315 @@
+blueprint:
+  name: "Geschirrspüler (Home Connect): iOS Live Activity"
+  description: >-
+    Erstellt eine iOS Live Activity für einen Home-Connect-Geschirrspüler (Siemens, Bosch, Neff, Gaggenau)
+    mit Programmname, Fortschrittsbalken und Endzeit. Warnt bei Fehlern.
+    Updates werden gedrosselt, damit das Push-Limit der Companion App (500 pro Tag und Gerät) nicht erreicht wird.
+  domain: automation
+  input:
+    notify_service:
+      name: Benachrichtigungsdienst (iPhone)
+      description: "Der notify-Dienst deines iPhones, z. B. notify.mobile_app_iphone"
+      selector:
+        text: {}
+
+    title:
+      name: Titel der Live-Aktivität
+      description: "Der Name, der ganz oben in der Benachrichtigung stehen soll."
+      default: "Geschirrspüler"
+      selector:
+        text: {}
+
+    sensor_status:
+      name: Betriebszustand
+      description: "Die Entität für den Betriebszustand (endet meist auf _betriebszustand)."
+      selector:
+        entity:
+          domain: sensor
+
+    sensor_progress:
+      name: Fortschritts-Sensor (%)
+      description: "Die Entität für den Programmfortschritt in Prozent."
+      selector:
+        entity:
+          domain: sensor
+
+    sensor_end_time:
+      name: Endzeit-Sensor
+      description: "Die Entität für die Programmendzeit."
+      selector:
+        entity:
+          domain: sensor
+
+    program_entity:
+      name: Aktives Programm (Optional)
+      description: "Sensor oder Auswahl für das aktive Programm. Sein Name steht während des Programms in der Live-Aktivität. Leer lassen für „Läuft“."
+      default: ""
+      selector:
+        entity:
+          domain:
+            - sensor
+            - select
+
+    tap_url:
+      name: Aktion beim Antippen (Optional)
+      description: "Dashboard-Pfad (z. B. /lovelace/kueche). Leer lassen für den Standard."
+      default: ""
+      selector:
+        text: {}
+
+    color_normal:
+      name: Farbe (Programm läuft)
+      default: [38, 198, 218] # Entspricht #26C6DA
+      selector:
+        color_rgb: {}
+
+    color_pause:
+      name: Farbe (Pausiert)
+      default: [255, 152, 0] # Entspricht #FF9800
+      selector:
+        color_rgb: {}
+
+    color_error:
+      name: Farbe (Aktion erforderlich / Fehler)
+      default: [244, 67, 54] # Entspricht #F44336
+      selector:
+        color_rgb: {}
+
+    color_done:
+      name: Farbe (Fertig)
+      default: [76, 175, 80] # Entspricht #4CAF50
+      selector:
+        color_rgb: {}
+
+    progress_step:
+      name: Fortschritts-Schrittweite
+      description: "Die Live-Aktivität wird nur aktualisiert, wenn der Fortschritt ein Vielfaches dieses Werts überschreitet. 5 % sind maximal 20 Updates pro Programm."
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 25
+          step: 1
+          unit_of_measurement: "%"
+
+    min_update_interval:
+      name: Mindestabstand zwischen Updates
+      description: "Gilt für Routine-Updates: Fortschritt und Endzeit. Start, Pause, Aktion erforderlich, Fehler und Ende werden immer sofort gesendet."
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          step: 1
+          unit_of_measurement: min
+
+    eta_threshold:
+      name: Endzeit-Schwelle
+      description: "Eine geänderte Endzeit löst nur dann ein eigenes Update aus, wenn sie mindestens um diesen Wert springt. Kleinere Änderungen werden beim nächsten Fortschritts-Update mitgeschickt."
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 120
+          step: 1
+          unit_of_measurement: min
+
+# restart bleibt nötig: Ein neues Programm muss den 15-Minuten-Timer nach "Fertig" abbrechen,
+# sonst löscht dieser die neue Live-Aktivität. Trigger, die an der condition scheitern,
+# starten die Automation nicht neu und lassen den Timer also weiterlaufen.
+mode: restart
+
+trigger:
+  # not_to bzw. to ignorieren reine Attribut-Änderungen, die sonst ebenfalls auslösen würden
+  - platform: state
+    entity_id: !input sensor_status
+    id: status
+    to: ~
+  - platform: state
+    entity_id: !input sensor_progress
+    id: progress
+    to: ~
+  - platform: state
+    entity_id: !input sensor_end_time
+    id: end_time
+    to: ~
+
+variables:
+  # Blueprint-Inputs in Template-Variablen laden
+  sensor_status_var: !input sensor_status
+  sensor_progress_var: !input sensor_progress
+  sensor_end_time_var: !input sensor_end_time
+  program_entity_var: !input program_entity
+  tap_url_var: !input tap_url
+  title_var: !input title
+  progress_step_var: !input progress_step
+  min_update_interval_var: !input min_update_interval
+  eta_threshold_var: !input eta_threshold
+
+  # RGB-Listen aus dem Color-Picker in Hex-Strings für iOS umwandeln
+  color_normal_rgb: !input color_normal
+  color_pause_rgb: !input color_pause
+  color_error_rgb: !input color_error
+  color_done_rgb: !input color_done
+  color_normal_var: "{{ '#%02x%02x%02x' | format(color_normal_rgb[0], color_normal_rgb[1], color_normal_rgb[2]) }}"
+  color_pause_var: "{{ '#%02x%02x%02x' | format(color_pause_rgb[0], color_pause_rgb[1], color_pause_rgb[2]) }}"
+  color_error_var: "{{ '#%02x%02x%02x' | format(color_error_rgb[0], color_error_rgb[1], color_error_rgb[2]) }}"
+  color_done_var: "{{ '#%02x%02x%02x' | format(color_done_rgb[0], color_done_rgb[1], color_done_rgb[2]) }}"
+
+  # Logik und Berechnungen
+  st: "{{ states(sensor_status_var) | lower }}"
+  prog: "{{ states(sensor_progress_var) | int(0) }}"
+  end: "{{ states(sensor_end_time_var) }}"
+  end_time_str: >-
+    {{ as_timestamp(end) | timestamp_custom('%H:%M') if end not in
+    ['unavailable', 'unknown', 'None'] else '--:--' }}
+
+  # Programmname: alte Integration liefert "Dishcare.Dishwasher.Program.Eco50",
+  # neuere "dishcare_dishwasher_program_eco_50"
+  program_name: >-
+    {% set p = states(program_entity_var) if program_entity_var not in ['', none] else 'unknown' %}
+    {% if p in ['unknown', 'unavailable', 'none', ''] %}Läuft
+    {% elif '.' in p %}{{ p.split('.') | last }}
+    {% else %}{{ p | replace('dishcare_dishwasher_program_', '') | replace('_', ' ') | title }}{% endif %}
+
+  st_text: >-
+    {% set map = {
+      "delayedstart": "Vorwahl",
+      "pause": "Pausiert",
+      "actionrequired": "Aktion erforderlich!"
+    } %}
+    {{ program_name if st == 'run' else map.get(st, st) }}
+
+  icon_color: >-
+    {% if st == 'actionrequired' %}{{ color_error_var }}{% elif st == 'pause'
+    %}{{ color_pause_var }}{% else %}{{ color_normal_var }}{% endif %}
+
+  # Phase des Geschirrspülers: active, done, error, off oder none (z. B. unavailable)
+  active_states: ["delayedstart", "run", "pause", "actionrequired"]
+  off_states: ["inactive", "ready", "aborting"]
+  phase: >-
+    {% if st in active_states %}active{% elif st == 'finished' %}done{% elif st == 'error'
+    %}error{% elif st in off_states %}off{% else %}none{% endif %}
+
+  # last_triggered zählt nur Läufe, die die condition passiert haben, also echte Updates
+  interval_ok: >-
+    {{ as_timestamp(now()) - as_timestamp(this.attributes.last_triggered, 0)
+       >= min_update_interval_var * 60 }}
+
+  # Einzigartiger Tag je Gerät, damit mehrere Geräte parallel laufen können
+  dynamic_tag: "geschirrspueler_{{ sensor_status_var | replace('.', '_') }}"
+
+# Entscheidet, ob dieser Trigger ein Update wert ist. Jedes Update ist ein Push.
+condition:
+  - condition: template
+    value_template: >-
+      {% set from_raw = trigger.from_state.state if trigger.from_state else 'unknown' %}
+      {% set from_st = from_raw | lower %}
+      {% if trigger.id == 'status' %}
+        {% set from_phase = 'active' if from_st in active_states
+           else 'done' if from_st == 'finished'
+           else 'error' if from_st == 'error'
+           else 'off' if from_st in off_states
+           else 'none' %}
+        {% if phase == 'none' %}
+          {# unavailable/unknown: nichts senden, die Aktivität bleibt stehen #}
+          false
+        {% elif phase == 'active' %}
+          {# Jeder Wechsel innerhalb von active (Start, Pause, Aktion erforderlich) sofort senden #}
+          {{ st != from_st }}
+        {% elif phase in ['done', 'error'] %}
+          {{ phase != from_phase }}
+        {% else %}
+          {# off nach done: Die Aktivität läuft über den 15-Minuten-Timer aus #}
+          {{ from_phase == 'active' }}
+        {% endif %}
+      {% elif trigger.id == 'progress' %}
+        {% set to_p = trigger.to_state.state | int(-1) %}
+        {% set from_p = from_st | int(-1) %}
+        {% set crossed = to_p >= 0 and from_p >= 0
+           and to_p // progress_step_var != from_p // progress_step_var %}
+        {{ phase == 'active' and crossed and interval_ok }}
+      {% else %}
+        {% set to_t = as_timestamp(trigger.to_state.state, none) %}
+        {% set from_t = as_timestamp(from_raw, none) %}
+        {# Die erste gültige Endzeit sofort senden, sonst nur bei großen Sprüngen #}
+        {{ phase == 'active' and to_t is not none and (from_t is none or
+           (interval_ok and (to_t - from_t) | abs >= eta_threshold_var * 60)) }}
+      {% endif %}
+
+action:
+  - choose:
+      # 1. PROGRAMM AKTIV (Vorwahl, läuft, pausiert, Aktion erforderlich)
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'active' }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              title: "{{ title_var }}"
+              message: "Fertig um {{ end_time_str }} Uhr"
+              data:
+                tag: "{{ dynamic_tag }}"
+                live_update: true
+                silent: true
+                url: "{{ tap_url_var }}"
+                critical_text: "{{ st_text }}"
+                progress: "{{ prog }}"
+                progress_max: 100
+                notification_icon: mdi:dishwasher
+                notification_icon_color: "{{ icon_color }}"
+
+      # 2. PROGRAMM FERTIG
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'done' }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              title: "{{ title_var }}"
+              message: "Das Programm ist fertig!"
+              data:
+                tag: "{{ dynamic_tag }}"
+                live_update: true
+                url: "{{ tap_url_var }}"
+                critical_text: "Fertig"
+                progress: 100
+                progress_max: 100
+                notification_icon: mdi:dishwasher
+                notification_icon_color: "{{ color_done_var }}"
+          - delay: "00:15:00"
+          - action: !input notify_service
+            data:
+              message: clear_notification
+              data:
+                tag: "{{ dynamic_tag }}"
+
+      # 3. FEHLER (Live-Aktivität beenden und einmalig warnen)
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'error' }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              message: clear_notification
+              data:
+                tag: "{{ dynamic_tag }}"
+          - action: !input notify_service
+            data:
+              title: "{{ title_var }} Fehler"
+              message: "Der Geschirrspüler meldet einen Fehler!"
+              data:
+                url: "{{ tap_url_var }}"
+                notification_icon: mdi:alert-circle
+                notification_icon_color: "{{ color_error_var }}"
+
+      # 4. ABGEBROCHEN / AUS (Live-Aktivität sofort beenden)
+      - conditions:
+          - condition: template
+            value_template: "{{ phase == 'off' }}"
+        sequence:
+          - action: !input notify_service
+            data:
+              message: clear_notification
+              data:
+                tag: "{{ dynamic_tag }}"
